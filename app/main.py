@@ -1,9 +1,14 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, Response
 app = Flask(__name__,
             static_url_path='',
             static_folder='/')
 
-@app.route("/")
+@app.route("/", methods=["POST"])
+def handle_upload():
+    with open('yeet.webm', 'wb') as f:
+        f.write(request.get_data())
+    return Response("nice")
+@app.route("/", methods=["GET"])
 @app.route("/index")
 def index():
     song1 = {'id': '1234', 'title': 'Song One', 'duration': '3.14'}
@@ -15,9 +20,9 @@ def join():
 
 @app.route("/song/<song_id>/")
 def song(song_id):
-    song1 = {'id': '1234', 'title': 'Song One'}
-    track1 = {'id': '9', 'title': 'Guitar 1'}
-    return render_template('song.html', song_id=song_id, song1=song1, track1=track1)
+    track1 = [{'id': '9', 'title': 'Guitar 1', 'file': 'chechen.mp3'}]
+    song1 = {'id': '1234', 'title': 'Song One', 'tracks': track1}
+    return render_template('song.html', song_id=song_id, song1=song1)
 
 @app.route("/newsong")
 def newsong():
