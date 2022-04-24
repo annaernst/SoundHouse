@@ -1,0 +1,30 @@
+nav {
+    font-weight: 600;
+}
+
+.submit-btn {
+    background-color: #70cccc;
+}
+
+.responsive {
+    max-width: 550px;
+}
+
+i {
+    font-size: 1.2em;
+}
+
+.btn-dark {
+    border-radius: 50%;
+}
+
+.scaled {
+    transform: scale(1.2, 1.2);
+    transform-origin: left;
+  }
+
+@media only screen and (min-width: 600px){
+    form {
+        width: 50%;
+    }
+}
