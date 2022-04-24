@@ -513,9 +513,18 @@ def init(srv):
   if configurations['testing_mode'] == 1:
     # con.execute("INSERT OR IGNORE INTO songs (id, songname, bpm) values (1337, 'Demo Song', 105)")
     # con.commit()
-    # with open('chechen.mp3', 'rb') as f:
+    # with open('alto.mp3', 'rb') as f:
     #   data = f.read()
-    # ingress_new_track(1337, "woot", data, 0)
+    # ingress_new_track(1337, "alto", data, 0)
+    # with open('bass.mp3', 'rb') as f:
+    #   data = f.read()
+    # ingress_new_track(1337, "bass", data, 0)
+    # with open('soprano.mp3', 'rb') as f:
+    #   data = f.read()
+    # ingress_new_track(1337, "soprano", data, 0)
+    # with open('tenor.mp3', 'rb') as f:
+    #   data = f.read()
+    # ingress_new_track(1337, "tenor", data, 0)
     # con.commit()
     print("finished")
     print(get_tracks_for_song_from_db(1337))
