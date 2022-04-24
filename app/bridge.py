@@ -29,6 +29,8 @@ configurations = {
 bridge_server_ip = '127.0.0.1'
 bridge_server_port = 8080
 
+known_tuples = {}
+
 last_packet_handled = time()
 
 def get_songs_from_db():
@@ -52,6 +54,7 @@ def get_piece_info_for_song_from_db(trackid):
   return [(int.from_bytes(row[0], 'little'), row[1]) for row in r]
 
 def get_all_pieces_for_song_from_db(trackid):
+  print(trackid)
   cur = con.cursor()
   r = cur.execute("SELECT id, sequence_number, data FROM pieces WHERE trackid = ?", (trackid,))
   return [(int.from_bytes(row[0], 'little', signed=False), row[1], row[2]) for row in r]
@@ -90,11 +93,13 @@ def get_block_data(blockids):
   return [(int.from_bytes(row[0], 'little'), row[1], row[2]) for row in r]
 
 def data_url_from_blocks(trackid):
+  print(trackid)
   cur = con.cursor()
   r = cur.execute("SELECT pieces.sequence_number, pieces.data FROM pieces WHERE trackid=? ORDER BY sequence_number", (trackid,)).fetchall()
   data = bytearray()
   for row in r:
-    data += row[1]
+    if row[1] is not None:
+      data += row[1]
   encoded = base64.b64encode(data)
   return 'data:audio/ogg;base64,'+str(encoded, 'utf-8')
 
@@ -298,6 +303,7 @@ class QueryHandler(BaseClassHandler):
         for i in range(len(piece_info) // me + 1):
           blp = BlockListPacket()
           blp.seq = brp.id
+          print(f'brpid:{brp.id}')
           blp.blocks = piece_info[me*i:min(me*(i+1), len(piece_info))]
           output_queue.append((requesthandler.client_address[0], packet.replyport, blp))
         pass
@@ -324,9 +330,9 @@ class QueryResponseHandler(BaseClassHandler):
             # candidate_tracks.append(track_tuple[0])
       elif cmd == 0x02: # block list packet
         blp = BlockListPacket.deserialize(packet.data[:packet.data_length])
-        candidate_tracks.add(blp.seq)
+        candidate_tracks.add(packet.sequence_number)
         for block_info in blp.blocks:
-          add_block_info_from_packet(blp.seq, block_info)
+          add_block_info_from_packet(packet.sequence_number, block_info)
           
 
 
@@ -361,7 +367,6 @@ class_handlers = {
 }
 
 
-
 def wrap_packet(packet):
   return protocol.prepare_packet(packet.seq, )
 
@@ -394,20 +399,36 @@ class Bla(BaseHTTPRequestHandler):
     self.end_headers()
     # self.wfile.write(packet)
     pass
-
+refresh_counter = 0
 def run(srv, server_class=HTTPServer, handler_class=Bla):
-    global output_queue
+    global output_queue, candidate_tracks, refresh_counter
     server_address = ('', configurations['listen_port'])
     httpd = server_class(server_address, handler_class)
     httpd.timeout = 0.1
     done = False
     s = requests.Session()
     while True:
+      if refresh_counter%50 == 0 and configurations['testing_mode'] == 0:
+        output_queue.append((bridge_server_ip, bridge_server_port, SongRequestPacket()))
+        pass
+      if refresh_counter%200 == 0 and configurations['testing_mode'] == 1:
+        bad = list()
+        for ip, port in known_tuples.keys():
+          srp = SongRequestPacket()
+          try:
+            s.post(f"http://{ip}:{port}/", srp.seq, srp.klass << 8 | srp.command, False, False, srp.serialize(), configurations['identity'], 0, configurations['listen_port'])
+          except:
+            bad.append((ip, port))
+        for l in bad:
+          del known_tuples[l]
+        refresh_counter+=1
+        continue
+      refresh_counter+=1
       httpd.handle_request()
       if srv is not None:
         srv.handle_request()
       if len(candidate_tracks) > 0:
-        print('grabbing')
+        print(candidate_tracks)
         i = candidate_tracks.pop()
         mbr = MassBlockRequestPacket()
         mbr.id = i
@@ -418,6 +439,7 @@ def run(srv, server_class=HTTPServer, handler_class=Bla):
         con.commit()
         if len(output_queue) > 0:
           ip, port, pkt = output_queue.pop()
+          known_tuples[(ip, port)] = 1
           outer += protocol.prepare_packet(pkt.seq, pkt.klass << 8 | pkt.command, False, False, pkt.serialize(), configurations['identity'], 0,
                           configurations['listen_port'])
         else:
@@ -476,8 +498,6 @@ def init(srv):
     # con.commit()
     print("finished")
     print(get_tracks_for_song_from_db(1337))
-  elif configurations['testing_mode'] == 0:
-    output_queue.append((bridge_server_ip, bridge_server_port, SongRequestPacket()))
   run(srv)
 
 
