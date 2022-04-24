@@ -1,9 +1,10 @@
 import base64
 from collections import namedtuple
+from random import random
 import sqlite3
 from time import time
 
-from flask import request
+from flask import redirect, request
 from numpy import byte
 import protocol
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
@@ -184,7 +185,7 @@ class BlockDataPacket(Packet):
   data = bytes()
   struct_string = "<1024s"
   def serialize(self):
-    return struct.pack(self.struct_string, self.data)
+    return struct.pack(self.struct_string, self.data if self.data is not None else bytes([]))
   @staticmethod
   def deserialize(buf):
     trp = BlockDataPacket()
@@ -408,16 +409,19 @@ def run(srv, server_class=HTTPServer, handler_class=Bla):
     done = False
     s = requests.Session()
     while True:
+      # print('beat')
       if refresh_counter%50 == 0 and configurations['testing_mode'] == 0:
         output_queue.append((bridge_server_ip, bridge_server_port, SongRequestPacket()))
         pass
-      if refresh_counter%200 == 0 and configurations['testing_mode'] == 1:
+      if refresh_counter%159 == 0 and configurations['testing_mode'] == 1:
         bad = list()
         for ip, port in known_tuples.keys():
+          print('asking nicely')
           srp = SongRequestPacket()
           try:
-            s.post(f"http://{ip}:{port}/", srp.seq, srp.klass << 8 | srp.command, False, False, srp.serialize(), configurations['identity'], 0, configurations['listen_port'])
+            s.post(f"http://{ip}:{port}/", protocol.prepare_packet(srp.seq, srp.klass << 8 | srp.command, False, False, srp.serialize(), configurations['identity'], 0, configurations['listen_port']), timeout=5)
           except:
+            print('bad client!')
             bad.append((ip, port))
         for l in bad:
           del known_tuples[l]
@@ -432,7 +436,24 @@ def run(srv, server_class=HTTPServer, handler_class=Bla):
         i = candidate_tracks.pop()
         mbr = MassBlockRequestPacket()
         mbr.id = i
-        output_queue.append((bridge_server_ip, bridge_server_port, mbr))
+        if configurations['testing_mode'] == 0:
+          output_queue.append((bridge_server_ip, bridge_server_port, mbr))
+        else:
+            if len(known_tuples.keys()) == 0:
+              candidate_tracks.add(i)
+            else:
+              hit = False
+              for k,v in known_tuples.keys():
+                if random() > 0.2:
+                  continue
+                try:
+                  s.post(f"http://{k}:{v}/", protocol.prepare_packet(mbr.seq, mbr.klass << 8 | mbr.command, False, False, mbr.serialize(), configurations['identity'], 0, configurations['listen_port']), timeout=5)
+                  hit = True
+                  break
+                except:
+                  print('bad client!')
+              if not hit:
+                candidate_tracks.add(i)
       outer = bytearray()
       ip, port = None, None
       for _ in range(5000):
@@ -447,9 +468,9 @@ def run(srv, server_class=HTTPServer, handler_class=Bla):
       try:
         if ip is not None:
           s.post(f"http://{ip}:{port}/",
-                          outer)   
+                          outer, timeout=5)   
       except Exception as e:
-            raise e
+            print(e)
   
 def ingress_new_track(songid, trackname, rawdata, timestmp) -> int:
   block_size = 1024
@@ -490,7 +511,7 @@ def init(srv):
     cur.executescript(script)
   data = None
   if configurations['testing_mode'] == 1:
-    # con.execute("INSERT INTO songs (id, songname, bpm) values (1337, 'Demo Song', 105)")
+    # con.execute("INSERT OR IGNORE INTO songs (id, songname, bpm) values (1337, 'Demo Song', 105)")
     # con.commit()
     # with open('chechen.mp3', 'rb') as f:
     #   data = f.read()
@@ -508,7 +529,7 @@ app = Flask(__name__,
 
 @app.route("/uploadtrack/<song_id>/<track_name>", methods=["POST"])
 def handle_upload(song_id, track_name):
-    ingress_new_track(song_id, track_name, request.get_data(), time())
+    ingress_new_track(song_id, track_name, request.get_data(), int(time()))
     return Response()
 @app.route("/", methods=["GET"])
 @app.route("/index")
@@ -519,6 +540,15 @@ def index():
 @app.route("/join")
 def join():
     return render_template('join.html')
+
+@app.route("/newsong")
+def newsongget():
+  return render_template('newsong.html')
+
+@app.route("/addsong/<name>/<bpm>", methods=["POST"])
+def addsong(name, bpm):
+  add_song_from_packet(((int(random() * time()) % 0xFFFFFFFF), int(bpm), name))
+  return redirect("/")
 
 @app.route("/song/<song_id>/")
 def song(song_id):

@@ -197,7 +197,8 @@
           chunks = []
           boxes.innerHTML=boxes.innerHTML.concat('<span class="form-check form-switch mb-3"><input id="newname" type="text"></input></span>')
           save=()=>{
-            fetch("/uploadtrack/{{song_id}}/"+document.getElementById("newname").value, {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: blob});
+            fetch("/uploadtrack/{{song_id}}/"+document.getElementById("newname").value, {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: blob}).then(() => location.reload());
+            
           }
           /*url=URL.createObjectURL(blob)
           peerTrack.src=url*/

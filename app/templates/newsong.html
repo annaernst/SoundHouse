@@ -41,17 +41,21 @@
     <form class="container responsive">
         <div class="my-3">
           <label for="title" class="form-label">Name of Track</label>
-          <input type="text" class="form-control" id="title">
+          <input type="text" class="form-control" id="title" form=0>
         </div>
         <div class="my-3">
             <label for="bpm" class="form-label">BPM</label>
-            <input type="text" class="form-control" id="bpm">
+            <input type="text" class="form-control" id="bpm" form=0>
         </div>
 
-        <button type="submit" class="btn btn-light submit-btn">Add</button>
+        <button class="btn btn-light submit-btn" form=0 onclick="oc()">Add</input>
     </form>
 
     <!--BOOTSTRAP JS-->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
 </body>
+
+<script>
+  oc = ()=>{fetch('/addsong/'+document.getElementById('title').value+'/'+document.getElementById('bpm').value, {'method':'POST', 'body':{}}).then(() => window.location.replace('/'))}
+</script>
 </html>
