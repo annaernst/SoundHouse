@@ -350,21 +350,22 @@ class Bla(BaseHTTPRequestHandler):
     if(content_len < 42):
       self.send_response(500)
       return
-    packet = self.rfile.read(content_len)
-    res = protocol.unpack_packet(packet)
-    if not res:
-      self.send_response(500)
-      return
-    print(len(res.data))
-    klass = res.typeb >> 8
-    command = res.typeb & 0xFF
-    print(f'Request class: {klass}')
-    print(f'Request cmd: {command}')
-    if klass not in class_handlers:
-      self.send_response(500)
-      return
-    klass_handler = class_handlers[klass]
-    klass_handler.handle_for(command, res, self)
+    for i in range(content_len//1075):
+      packet = self.rfile.read(1075)
+      res = protocol.unpack_packet(packet)
+      if not res:
+        self.send_response(500)
+        return
+      klass = res.typeb >> 8
+      command = res.typeb & 0xFF
+      if klass not in class_handlers:
+        self.send_response(500)
+        return
+      # print(f'Request class: {klass}')
+      # print(f'Request cmd: {command}')
+      klass_handler = class_handlers[klass]
+      klass_handler.handle_for(command, res, self)
+    
     self.send_response(200)
     self.send_header('Content-Type','application/octet-stream')
     self.end_headers()
@@ -377,6 +378,7 @@ def run(server_class=HTTPServer, handler_class=Bla):
     httpd = server_class(server_address, handler_class)
     httpd.timeout = 0.1
     done = False
+    s = requests.Session()
     while True:
       if time() - last_packet_handled > 3 and not done and configurations['testing_mode'] == 1:
         done = True
@@ -384,18 +386,22 @@ def run(server_class=HTTPServer, handler_class=Bla):
         mb.id = 1168101942
         output_queue.append(("127.0.0.1", 8000, mb))
       httpd.handle_request()
-      for _ in range(100):
+      outer = bytearray()
+      ip, port = None, None
+      for _ in range(5000):
         con.commit()
         if len(output_queue) > 0:
           ip, port, pkt = output_queue.pop()
-          print("sending packet!")
-          try:
-            requests.post(f"http://{ip}:{port}/",
-                          protocol.prepare_packet(pkt.seq, pkt.klass << 8 | pkt.command, False, False, pkt.serialize(), configurations['identity'], 0,
-                          configurations['listen_port']))
-          except Exception as e:
+          outer += protocol.prepare_packet(pkt.seq, pkt.klass << 8 | pkt.command, False, False, pkt.serialize(), configurations['identity'], 0,
+                          configurations['listen_port'])
+        else:
+          break
+      try:
+        if ip is not None:
+          s.post(f"http://{ip}:{port}/",
+                          outer)   
+      except Exception as e:
             raise e
-        else: break
   
 def ingress_new_track(songid, trackname, rawdata, timestmp) -> int:
   block_size = 1024
