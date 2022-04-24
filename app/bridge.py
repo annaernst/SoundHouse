@@ -1,3 +1,4 @@
+import base64
 from collections import namedtuple
 import sqlite3
 from time import time
@@ -9,6 +10,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 import hashlib
 import struct
 import requests
+
+import flask_compress
 
 import sys
 
@@ -30,6 +33,11 @@ def get_songs_from_db():
   r = cur.execute("SELECT * FROM songs")
   return [row for row in r]
 
+def get_song_from_db(songid):
+  cur = con.cursor()
+  r = cur.execute("SELECT * FROM songs WHERE id=?", (songid,)).fetchone()
+  return r
+
 def get_tracks_for_song_from_db(songid):
   cur = con.cursor()
   r = cur.execute("SELECT * FROM tracks WHERE songid = ?", (songid,))
@@ -43,7 +51,7 @@ def get_piece_info_for_song_from_db(trackid):
 def get_all_pieces_for_song_from_db(trackid):
   cur = con.cursor()
   r = cur.execute("SELECT id, sequence_number, data FROM pieces WHERE trackid = ?", (trackid,))
-  return [(int.from_bytes(row[0], 'little'), row[1], row[2]) for row in r]
+  return [(int.from_bytes(row[0], 'little', signed=False), row[1], row[2]) for row in r]
 
 def add_song_from_packet(song_tuple):
   cur = con.cursor()
@@ -66,17 +74,26 @@ def add_track_from_packet(track_tuple) -> bool:
 def add_block_info_from_packet(trackid, block_info):
   cur = con.cursor()
   cur.execute("INSERT OR IGNORE INTO pieces (id, trackid, sequence_number, present) VALUES (?,?,?,?)",
-              (sqlite3.Binary(int.to_bytes(block_info[1], 16, 'little')), trackid, block_info[0], False))
+              (sqlite3.Binary(int.to_bytes(block_info[1], 32, 'little', signed=False)), trackid, block_info[0], False))
 
 def set_block_db(blockid, sequence, data):
   cur = con.cursor()
   cur.execute("UPDATE pieces SET present=TRUE, data=? WHERE id=?",
-              (sqlite3.Binary(data), sqlite3.Binary(int.to_bytes(blockid, 16, 'little'))))
+              (sqlite3.Binary(data), sqlite3.Binary(int.to_bytes(blockid, 32, 'little'))))
 
 def get_block_data(blockids):
   cur = con.cursor()
   r = cur.executemany("SELECT id, sequence_number, data FROM pieces WHERE id = ?", ((sqlite3.Binary(blockid), ) for blockid in blockids))
   return [(int.from_bytes(row[0], 'little'), row[1], row[2]) for row in r]
+
+def data_url_from_blocks(trackid):
+  cur = con.cursor()
+  r = cur.execute("SELECT pieces.sequence_number, pieces.data FROM pieces WHERE trackid=? ORDER BY sequence_number", (trackid,)).fetchall()
+  data = bytearray()
+  for row in r:
+    data += row[1]
+  encoded = base64.b64encode(data)
+  return 'data:audio/ogg;base64,'+str(encoded, 'utf-8')
 
 def max_entries_for_packet_type(pkt):
   return 1024//struct.calcsize(pkt.struct_string)
@@ -372,7 +389,7 @@ class Bla(BaseHTTPRequestHandler):
     # self.wfile.write(packet)
     pass
 
-def run(server_class=HTTPServer, handler_class=Bla):
+def run(srv, server_class=HTTPServer, handler_class=Bla):
     global output_queue
     server_address = ('', configurations['listen_port'])
     httpd = server_class(server_address, handler_class)
@@ -386,6 +403,7 @@ def run(server_class=HTTPServer, handler_class=Bla):
         mb.id = 1168101942
         output_queue.append(("127.0.0.1", 8000, mb))
       httpd.handle_request()
+      srv.handle_request()
       outer = bytearray()
       ip, port = None, None
       for _ in range(5000):
@@ -433,7 +451,7 @@ def ingress_new_track(songid, trackname, rawdata, timestmp) -> int:
     (sqlite3.Binary(blockids[i]), trackid, i, sqlite3.Binary(blocks[i])))
   pass
 
-def init():
+def init(srv):
   global con
   con = sqlite3.connect(configurations['database'])#'sh.db')
   with open('schema.sql', 'r') as f:
@@ -442,7 +460,7 @@ def init():
     cur.executescript(script)
   data = None
   if configurations['testing_mode'] == 0:
-    con.execute("INSERT INTO songs (id, songname, bpm) values (1337, 'ChechenSong', 100)")
+    con.execute("INSERT INTO songs (id, songname, bpm) values (1337, 'ChechenSong', 105)")
     con.commit()
     with open('chechen.mp3', 'rb') as f:
       data = f.read()
@@ -452,11 +470,64 @@ def init():
     print(get_tracks_for_song_from_db(1337))
   elif configurations['testing_mode'] == 1:
     output_queue.append(("127.0.0.1", 8000, SongRequestPacket()))
-  run()
+  run(srv)
+
+
+from flask import Flask, render_template, request, Response
+app = Flask(__name__,
+            static_url_path='',
+            static_folder='/')
+
+@app.route("/uploadtrack/<song_id>/<track_name>", methods=["POST"])
+def handle_upload(song_id, track_name):
+    ingress_new_track(song_id, track_name, request.get_data(), time())
+    return Response()
+@app.route("/", methods=["GET"])
+@app.route("/index")
+def index():
+    songs = [namedtuple('Song', 'id bpm title')._make(s) for s in get_songs_from_db()]
+    return render_template('index.html', songs=songs)
+
+@app.route("/join")
+def join():
+    return render_template('join.html')
+
+@app.route("/song/<song_id>/")
+def song(song_id):
+    song = get_song_from_db(song_id)
+    tracks_ = get_tracks_for_song_from_db(song_id)
+    tracks = [{'id':t[0], 'songid':t[1], 'title':t[2], 'timestamp':t[3]} for t in tracks_]
+    track_data=list()
+    for t in tracks:
+      track_data.append(data_url_from_blocks(t['id']))
+    #track1 = [{'id': '9', 'title': 'Guitar 1', 'file': 'chechen.mp3'}]
+    return render_template('song.html', name=song[2], bpm=song[1], song_id=song_id, tracks=tracks, track_data=track_data)
+
+flask_compress.Compress(app)
 
 if __name__ == "__main__":
   configurations['listen_port'] = int(sys.argv[1])
   configurations['testing_mode'] = int(sys.argv[2])
   configurations['identity'] = int(sys.argv[3])
   configurations['database'] = sys.argv[4]
-  init()
+  from werkzeug.serving import prepare_socket, make_server
+  import os
+  hostname = "0.0.0.0"
+  port = 5000
+  s = prepare_socket(hostname, port)
+  fd = s.fileno()
+  os.environ["WERKZEUG_SERVER_FD"] = str(fd)
+
+  srv = make_server(
+        hostname,
+        port,
+        app,
+        False,
+        1,
+        None,
+        True,
+        None,
+        fd=fd,
+    )
+  srv.timeout = 0.1
+  init(srv)

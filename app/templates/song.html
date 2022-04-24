@@ -42,7 +42,7 @@
   </nav>
   <!--OLD DROPDOWN
   <div class="container mt-3" style="max-width: 800px;">
-    <h1 class="display-6">{{song1.title}}</h1>
+    <h1 class="display-6">{{name}}</h1>
     <div class="accordion" id="accordionPanelsStayOpenExample">
       <div class="accordion-item">
         <h2 class="accordion-header" id="panelsStayOpen-headingOne">
@@ -125,13 +125,13 @@
 
   <!--NEW TRACK LIST-->
   <div class="container responsive mt-3" style="max-width: 800px;">
-    <h1 class="display-6">{{song1.title}}</h1>
+    <h1 class="display-6">{{name}}</h1>
     <div>
       <h5>Play Selected Tracks</h5>
       <button class="btn" type="button" onclick="for (i=0;i<le;i++){peerTracks[i].load()}">
         <i class="fas fa-backward"></i>
       </button>
-      <button class="btn" type="button" onclick="for (i=0;i<le;i++){if(document.getElementById(i.toString()).checked){peerTracks[i].play();console.log('playing')}};if(document.getElementById('metv').checked){metro=setInterval(()=>{met.play()},300)}">
+      <button class="btn" type="button" onclick="for (i=0;i<le;i++){if(document.getElementById(i.toString()).checked){peerTracks[i].play();console.log('playing')}};if(document.getElementById('metv').checked){metro=setInterval(()=>{met.play()}, 60000/({{bpm}}))}">
         <i class="fas fa-play"></i>
       </button>
       <button class="btn" type="button" onclick="for (i=0;i<le;i++){if(document.getElementById(i.toString()).checked){peerTracks[i].pause()}};clearInterval(metro)">
@@ -153,10 +153,10 @@
     crossorigin="anonymous"></script>
   <script>
     let i
-    let le={{song1|safe}}.tracks.length
+    let le={{tracks|safe}}.length
     boxes=document.getElementById("boxes")
     for (i=0;i<le;i++){
-        boxes.innerHTML=boxes.innerHTML.concat('<input type="range" min="0" max="1" value="1" step=".01" class="slider" onclick="volume()" id=',(i+0.5).toString(),'><span class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" onclick="for (i=0;i<le;i++){peerTracks[i].load()}" id=',i.toString(),' role="switch"><label class="form-check-label" for=',i.toString(),'> ',{{song1|safe}}.tracks[i].title,'</label></span>')
+        boxes.innerHTML=boxes.innerHTML.concat('<input type="range" min="0" max="1" value="1" step=".01" class="slider" onclick="volume()" id=',(i+0.5).toString(),'><span class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" onclick="for (i=0;i<le;i++){peerTracks[i].load()}" id=',i.toString(),' role="switch"><label class="form-check-label" for=',i.toString(),'> ',{{tracks|safe}}[i].title,'</label></span>')
     }
     boxes.innerHTML=boxes.innerHTML.concat('<input type="range" min="0" max="1" value="1" step=".01" class="slider" onclick="volume()" id="metvs"><span class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" onclick="for (i=0;i<le;i++){peerTracks[i].load()}" id="metv" role="switch"><label class="form-check-label" for="metv"> metronome</label></span>')
     let metro
@@ -165,9 +165,14 @@
     let id=setInterval(()=>{})
     let mbut=document.getElementById('m')
     let peerTracks=[]
+    let trackData = [
+      {% for track in track_data %} 
+        "{{ track }}", 
+      {% endfor %}
+    ]
     for (i=0;i<le;i++){
       peerTracks.push(document.createElement("AUDIO"))
-      peerTracks[i].src="/".concat({{song1|safe}}.tracks[i].file)
+      peerTracks[i].src=trackData[i]
     }
     volume=()=>{
       for (i=0;i<le;i++){peerTracks[i].volume=document.getElementById((i+0.5).toString()).valueAsNumber}
@@ -192,8 +197,7 @@
           chunks = []
           boxes.innerHTML=boxes.innerHTML.concat('<span class="form-check form-switch mb-3"><input id="newname" type="text"></input></span>')
           save=()=>{
-            fetch("/", {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: blob});
-            fetch("/title", {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: document.getElementById("newname").value})
+            fetch("/uploadtrack/{{song_id}}/"+document.getElementById("newname").value, {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: blob});
           }
           /*url=URL.createObjectURL(blob)
           peerTrack.src=url*/
