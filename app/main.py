@@ -19,5 +19,9 @@ def song(song_id):
     track1 = {'id': '9', 'title': 'Guitar 1'}
     return render_template('song.html', song_id=song_id, song1=song1, track1=track1)
 
+@app.route("/newsong")
+def newsong():
+    return render_template('newsong.html')
+
 if __name__ == "__main__":
     app.run()
