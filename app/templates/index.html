@@ -37,16 +37,13 @@
           </nav>
 
         <!--SONGS-->
-        <div class="container">
-            <div class="list-group my-3 responsive">
-                <a href="song/{{song1.id}}" class="list-group-item list-group-item-action">{{song1.title}}</a>
-                <a href="#" class="list-group-item list-group-item-action">A third link item</a>
-                <a href="#" class="list-group-item list-group-item-action">A fourth link item</a>  
-            </div>
+        <div class="container list-group my-3 responsive">
+            <a href="song/{{song1.id}}" class="list-group-item list-group-item-action">{{song1.title}}</a>
+            <a href="#" class="list-group-item list-group-item-action">A third link item</a>
+            <a href="#" class="list-group-item list-group-item-action">A fourth link item</a>
             <!--ADD NEW SONG BUTTON-->
-            <button>Add a New Song</button>
+            <a class="btn btn-light submit-btn" href="{{url_for('static', filename='newsong')}}">Add a New Song</a>
         </div>
-        
 
         
 
