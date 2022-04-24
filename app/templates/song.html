@@ -188,8 +188,10 @@
           console.log(chunks)
           var blob = new Blob(chunks, { 'type' : 'audio/ogg; codecs=opus' });
           chunks = []
+          boxes.innerHTML=boxes.innerHTML.concat('<span class="form-check form-switch mb-3"><input id="newname" type="text"></input></span>')
           save=()=>{
             fetch("/", {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: blob});
+            fetch("/title", {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: document.getElementById("newname").value})
           }
           /*url=URL.createObjectURL(blob)
           peerTrack.src=url*/
