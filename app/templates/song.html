@@ -127,6 +127,7 @@
   <div class="container responsive mt-3" style="max-width: 800px;">
     <h1 class="display-6">{{song1.title}}</h1>
     <div>
+      <h5>Play Selected Tracks</h5>
       <button class="btn" type="button" onclick="for (i=0;i<le;i++){peerTracks[i].load()}">
         <i class="fas fa-backward"></i>
       </button>
@@ -136,9 +137,10 @@
       <button class="btn" type="button" onclick="for (i=0;i<le;i++){if(document.getElementById(i.toString()).checked){peerTracks[i].pause()}};clearInterval(metro)">
         <i class="fas fa-pause"></i>
       </button>
-      <button type="button" onclick="start()">start</button>
-      <button type="button" onclick="stop()">stop</button>
-      <button type="button" onclick="save()">save</button>
+      <h5>Record New Track</h5>
+      <button class="btn" type="button" onclick="save()"><i class="fas fa-save"></i></button>
+      <button class="btn" type="button" onclick="start()"><i class="fas fa-play"></i></button>
+      <button class="btn" type="button" onclick="stop()"><i class="fas fa-square"></i></button>
     </div>
 
     <!--track card-->
