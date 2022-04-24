@@ -19,12 +19,15 @@ con: sqlite3.Connection = None
 
 output_queue = list()
 
-candidate_tracks = list()
+candidate_tracks = set()
 
 configurations = {
   'listen_port': 8000,
   'testing_mode': 0
 }
+
+bridge_server_ip = '127.0.0.1'
+bridge_server_port = 8080
 
 last_packet_handled = time()
 
@@ -210,7 +213,7 @@ class TrackListPacket(Packet):
     return buf
   @staticmethod
   def deserialize(buf):
-    bla = [l for l in struct.iter_unpack(TrackListPacket.struct_string, buf)]
+    bla = [(l[0], l[1], str(l[2], 'utf-8'), l[3])  for l in struct.iter_unpack(TrackListPacket.struct_string, buf)]
     tlp = TrackListPacket()
     tlp.track_tuples = bla
     return tlp
@@ -235,8 +238,8 @@ class SongListPacket(Packet):
   def deserialize(buf): 
     sz = struct.calcsize(SongListPacket.struct_string)
     bla = list()
-    for l in struct.iter_unpack(SongListPacket.struct_string, buf):
-      bla.append(l)
+    for id, bpm, name in struct.iter_unpack(SongListPacket.struct_string, buf):
+      bla.append((id, bpm, str(name, 'utf-8')))
     slp = SongListPacket()
     slp.song_pairs = bla
     return slp
@@ -321,14 +324,17 @@ class QueryResponseHandler(BaseClassHandler):
             # candidate_tracks.append(track_tuple[0])
       elif cmd == 0x02: # block list packet
         blp = BlockListPacket.deserialize(packet.data[:packet.data_length])
+        candidate_tracks.add(blp.seq)
         for block_info in blp.blocks:
           add_block_info_from_packet(blp.seq, block_info)
+          
 
 
 class BlockHandler(BaseClassHandler):
   def handle_for(self, cmd, packet, requesthandler: BaseHTTPRequestHandler):
       global output_queue
       if cmd == 0x00: # mass request
+        print('mass request')
         mr = MassBlockRequestPacket.deserialize(packet.data[:packet.data_length])
         blocks = get_all_pieces_for_song_from_db(mr.id) # heavy stuff
         for block in blocks:
@@ -397,13 +403,15 @@ def run(srv, server_class=HTTPServer, handler_class=Bla):
     done = False
     s = requests.Session()
     while True:
-      if time() - last_packet_handled > 3 and not done and configurations['testing_mode'] == 1:
-        done = True
-        mb = MassBlockRequestPacket()
-        mb.id = 1168101942
-        output_queue.append(("127.0.0.1", 8000, mb))
       httpd.handle_request()
-      srv.handle_request()
+      if srv is not None:
+        srv.handle_request()
+      if len(candidate_tracks) > 0:
+        print('grabbing')
+        i = candidate_tracks.pop()
+        mbr = MassBlockRequestPacket()
+        mbr.id = i
+        output_queue.append((bridge_server_ip, bridge_server_port, mbr))
       outer = bytearray()
       ip, port = None, None
       for _ in range(5000):
@@ -459,17 +467,17 @@ def init(srv):
     cur = con.cursor()
     cur.executescript(script)
   data = None
-  if configurations['testing_mode'] == 0:
-    con.execute("INSERT INTO songs (id, songname, bpm) values (1337, 'ChechenSong', 105)")
-    con.commit()
-    with open('chechen.mp3', 'rb') as f:
-      data = f.read()
-    ingress_new_track(1337, "woot", data, 0)
-    con.commit()
+  if configurations['testing_mode'] == 1:
+    # con.execute("INSERT INTO songs (id, songname, bpm) values (1337, 'Demo Song', 105)")
+    # con.commit()
+    # with open('chechen.mp3', 'rb') as f:
+    #   data = f.read()
+    # ingress_new_track(1337, "woot", data, 0)
+    # con.commit()
     print("finished")
     print(get_tracks_for_song_from_db(1337))
-  elif configurations['testing_mode'] == 1:
-    output_queue.append(("127.0.0.1", 8000, SongRequestPacket()))
+  elif configurations['testing_mode'] == 0:
+    output_queue.append((bridge_server_ip, bridge_server_port, SongRequestPacket()))
   run(srv)
 
 
@@ -514,11 +522,13 @@ if __name__ == "__main__":
   import os
   hostname = "0.0.0.0"
   port = 5000
-  s = prepare_socket(hostname, port)
-  fd = s.fileno()
-  os.environ["WERKZEUG_SERVER_FD"] = str(fd)
+  srv = None
+  if configurations['testing_mode'] == 0:
+    s = prepare_socket(hostname, port)
+    fd = s.fileno()
+    os.environ["WERKZEUG_SERVER_FD"] = str(fd)
 
-  srv = make_server(
+    srv = make_server(
         hostname,
         port,
         app,
@@ -529,5 +539,5 @@ if __name__ == "__main__":
         None,
         fd=fd,
     )
-  srv.timeout = 0.1
+    srv.timeout = 0.1
   init(srv)
